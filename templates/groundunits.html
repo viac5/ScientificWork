@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>INI File Form</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        /* Контейнер для верхней части с кнопками */
+        .top-controls {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background-color: #fff;
+            z-index: 1000;
+            padding: 10px;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: flex-start; /* Кнопки выровнены по левому краю */
+            align-items: center;
+        }
+
+        /* Стиль для кнопок */
+        button {
+            padding: 10px 15px;
+            background-color: #6c757d; /* Серый цвет */
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-right: 10px; /* Отступ между кнопками */
+        }
+
+        button:hover {
+            background-color: #5a6268; /* Более темный оттенок серого при наведении */
+        }
+
+
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #f9f9f9;
+            min-width: 160px;
+            box-shadow: 0px 8px 16px rgba(0, 0, 0, 0.2);
+            z-index: 1;
+        }
+
+        .dropdown-content a {
+            color: black;
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+        }
+
+        .dropdown-content a:hover {
+            background-color: #f1f1f1;
+        }
+
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        /* Чтобы форма не оказалась скрыта за панелью навигации */
+        .content {
+            margin-top: 70px; /* Отступ, чтобы контент не заходил под навигацию */
+            padding: 20px;
+        }
+    </style>
+</head>
+<body>
+    <!-- Навигация -->
+    <div class="top-controls">
+        <div class="dropdown">
+            <button>Навигация</button>
+            <div class="dropdown-content">
+                <a href="/">Главная страница (Карта)</a>
+                <a href="/ground">Наземные объекты</a>
+                <a href="/3d">Перейти в 3D-режим</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="content">
+        <h1>Заполните данные для INI файла</h1>
+        <form action="/submit" method="POST">
+            <label for="title">Title (краткое название):</label>
+            <input type="text" name="title" id="title"><br><br>
+
+            <label for="caption">Caption (полное название):</label>
+            <input type="text" name="caption" id="caption"><br><br>
+
+            <label for="icon_width">Icon Width (ширина пиктограммы):</label>
+            <input type="number" name="icon_width" id="icon_width"><br><br>
+
+            <label for="icon_style">Icon Style (стиль пиктограммы):</label>
+            <input type="number" name="icon_style" id="icon_style"><br><br>
+
+            <label for="icon_pen_color">Icon Pen Color (RGB цвет линии):</label>
+            <input type="text" name="icon_pen_color" id="icon_pen_color" placeholder="0,0,0"><br><br>
+
+            <label for="icon_pen_width">Icon Pen Width (толщина линии):</label>
+            <input type="number" name="icon_pen_width" id="icon_pen_width"><br><br>
+
+            <label for="icon_pen_style">Icon Pen Style (стиль линии):</label>
+            <input type="number" name="icon_pen_style" id="icon_pen_style"><br><br>
+
+            <label for="icon_brush_color">Icon Brush Color (RGB цвет заливки):</label>
+            <input type="text" name="icon_brush_color" id="icon_brush_color" placeholder="0,0,139"><br><br>
+
+            <label for="icon_brush_style">Icon Brush Style (стиль заливки):</label>
+            <input type="number" name="icon_brush_style" id="icon_brush_style"><br><br>
+
+            <label for="radar_color">Radar Color (цвет радара):</label>
+            <input type="text" name="radar_color" id="radar_color" placeholder="255,215,0"><br><br>
+
+            <label for="view_angle">View Angle (угол обзора):</label>
+            <input type="number" step="0.01" name="view_angle" id="view_angle"><br><br>
+
+            <input type="submit" value="Сохранить в INI файл">
+        </form>
+    </div>
+</body>
+</html>

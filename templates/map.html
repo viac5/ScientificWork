@@ -1,0 +1,783 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Interactive Map</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.7.1/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.css" />
+    <script src="https://unpkg.com/leaflet@1.7.1/dist/leaflet.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet.draw/1.0.4/leaflet.draw.js"></script>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            font-family: Arial, sans-serif;
+        }
+
+        .top-controls {
+            position: fixed;
+            top: 0;
+            width: 100%;
+            background-color: #fff;
+            z-index: 1000;
+            padding: 10px;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.1);
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin-right: 10px;
+        }
+
+        button:hover {
+            background-color: #5a6268;
+        }
+
+        #map {
+            position: relative;
+            top: 60px;
+            height: calc(100vh - 60px);
+            width: 100%;
+        }
+
+        .custom-attribution {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.8);
+            padding: 5px;
+            border-radius: 5px;
+            font-size: 12px;
+        }
+
+        .ground-units-panel {
+            position: fixed;
+            top: 70px;
+            left: 10px;
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.2);
+            z-index: 1001;
+            padding: 10px;
+            display: none; /* Hidden by default */
+        }
+
+        .ground-units-modal {
+            position: fixed;
+            top: 20%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: white;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+            box-shadow: 0px 2px 5px rgba(0, 0, 0, 0.2);
+            z-index: 1002;
+            padding: 20px;
+            display: none; /* Hidden by default */
+        }
+
+        .ground-units-modal h3 {
+            margin: 0 0 10px;
+        }
+
+        .modal-buttons {
+            margin-top: 10px;
+            display: flex;
+            justify-content: space-between;
+        }
+
+        .toggle-button {
+            background-color: #007bff;
+        }
+
+        .toggle-button:hover {
+            background-color: #0056b3;
+        }
+
+        .dropdown {
+            position: relative;
+            display: inline-block;
+        }
+
+        .dropdown-content {
+            display: none;
+            position: absolute;
+            background-color: #f9f9f9;
+            min-width: 160px;
+            box-shadow: 0px 8px 16px 0px rgba(0,0,0,0.2);
+            z-index: 1;
+        }
+
+        .dropdown:hover .dropdown-content {
+            display: block;
+        }
+
+        .dropdown a {
+            color: black;
+            padding: 12px 16px;
+            text-decoration: none;
+            display: block;
+        }
+
+        .dropdown a:hover {
+            background-color: #f1f1f1;
+        }
+    </style>
+</head>
+<body>
+    <div class="top-controls">
+        <button onclick="saveCoords()">Сохранить координаты области</button>
+        <button class="toggle-button" onclick="openGroundUnitsModal()">Загрузить наземные объекты</button>
+        <button onclick="openSatelliteModal()">Выбрать спутники</button>
+        <div class="dropdown">
+            <button>Навигация</button>
+            <div class="dropdown-content">
+                <a href="/">Главная страница (Карта)</a>
+                <a href="/ground">Наземные объекты</a>
+                <a href="/3d">Перейти в 3D-режим</a>
+            </div>
+        </div>
+    </div>
+
+    <div class="ground-units-panel" id="groundUnitsPanel">
+    <h3>Наземные Объекты</h3>
+    <div id="groundUnitsList"></div>
+</div>
+
+<div class="ground-units-modal" id="groundUnitsModal">
+    <h3>Выберите наземные объекты для загрузки</h3>
+    <div id="checkboxContainer"></div>
+    <div class="modal-buttons">
+        <button onclick="loadSelectedGroundUnits()">Загрузить</button>
+        <button onclick="closeGroundUnitsModal()">Закрыть</button>
+    </div>
+</div>
+
+<style>
+    /* Стиль для модального окна и списка объектов */
+    .ground-units-modal {
+    position: fixed; /* Фиксированное позиционирование */
+    top: 10%; /* Отступ от верхнего края экрана */
+    left: 50%;
+    transform: translateX(-50%);
+    font-family: Arial, sans-serif;
+    background-color: #f9f9f9;
+    padding: 20px;
+    border-radius: 8px;
+    width: 300px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+    z-index: 1000; /* Повышенный уровень для перекрытия */
+}
+
+    #checkboxContainer div {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        margin-bottom: 10px;
+        padding: 5px 0;
+    }
+
+    #checkboxContainer label {
+        font-size: 14px;
+        color: #333;
+    }
+
+    /* Стили для селектора приоритета */
+    .priority-select {
+        font-size: 13px;
+        padding: 5px;
+        border-radius: 5px;
+        border: 1px solid #ccc;
+        background-color: #f0f0f0;
+        color: #333;
+    }
+
+    /* Цветовые стили для приоритетов */
+    .priority-high { color: red; }
+    .priority-medium { color: goldenrod; }
+    .priority-low { color: green; }
+
+    /* Кнопки модального окна */
+    .modal-buttons button {
+        font-size: 14px;
+        padding: 8px 12px;
+        margin-top: 10px;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+    }
+    .modal-buttons button:first-child {
+        background-color: #ccc; /* Зеленая кнопка загрузки */
+        color: black;
+        margin-right: 10px;
+    }
+    .modal-buttons button:last-child {
+        background-color: #ccc; /* Красная кнопка закрытия */
+        color: black;
+    }
+</style>
+
+
+    <div class="ground-units-modal" id="satelliteModal">
+        <h3>Выберите спутники</h3>
+        <div id="satelliteContainer"></div>
+        <div class="modal-buttons">
+            <button onclick="loadSelectedSatellites()">Загрузить</button>
+            <button onclick="closeSatelliteModal()">Закрыть</button>
+        </div>
+    </div>
+    <div id="rollPitchSliders" style="display: none;">
+    <h3>Настройки углов крена и тангажа</h3>
+    <label for="rollSlider">Крен (Roll): </label>
+    <input type="range" id="rollSlider" min="-40" max="40" step="0.1">
+    <span id="rollValue">0.0</span>
+
+    <label for="pitchSlider">Тангаж (Pitch): </label>
+    <input type="range" id="pitchSlider" min="-40" max="40" step="0.1">
+    <span id="pitchValue">0.0</span>
+    </div>
+
+    <div id="map"></div>
+
+    <script>
+        // Инициализация карты
+        var map = L.map('map', { attributionControl: false }).setView([0, 0], 2);
+
+        // Подключение тайлов из Flask сервера
+        L.tileLayer('/tiles/{z}/{x}/{y}.png', {
+            minZoom: 0,
+            maxZoom: 11,
+            tileSize: 256,
+        }).addTo(map);
+
+        // Устанавливаем максимальные границы карты (примерные координаты для глобуса)
+        var southWest = L.latLng(-85, -200);
+        var northEast = L.latLng(85, 200);
+        var bounds = L.latLngBounds(southWest, northEast);
+
+        map.setMaxBounds(bounds);
+
+        // Ограничение "отталкивания" при достижении границы
+        map.on('drag', function () {
+            map.panInsideBounds(bounds, { animate: false });
+        });
+
+        // Группа для рисования и сохранения маркеров
+        var groundUnitsLayer = L.layerGroup().addTo(map);
+        var groundUnits = []; // Список наземных объектов
+
+       // Функция для открытия модального окна выбора наземных объектов
+function openGroundUnitsModal() {
+    document.getElementById('checkboxContainer').innerHTML = ''; // Очищаем контейнер
+
+    fetch('/get_ground_units')
+        .then(response => response.json())
+        .then(data => {
+            groundUnits = data; // Сохраняем данные в массиве
+            data.forEach(unit => {
+                // Создаем чекбокс для каждого наземного объекта
+                var checkbox = document.createElement('input');
+                checkbox.type = 'checkbox';
+                checkbox.id = unit.title;
+                checkbox.value = unit.title;
+
+                var label = document.createElement('label');
+                label.htmlFor = unit.title;
+                label.textContent = unit.title;
+
+                // Создаем селектор приоритета с классом
+                var prioritySelect = document.createElement('select');
+                prioritySelect.id = `priority-${unit.title}`;
+                prioritySelect.className = 'priority-select';
+                prioritySelect.innerHTML = `
+                    <option value="high">Высокий</option>
+                    <option value="medium">Средний</option>
+                    <option value="low">Низкий</option>
+                `;
+
+                var div = document.createElement('div');
+                div.appendChild(checkbox);
+                div.appendChild(label);
+                div.appendChild(prioritySelect);
+                document.getElementById('checkboxContainer').appendChild(div);
+            });
+
+            document.getElementById('groundUnitsModal').style.display = 'block'; // Показываем модальное окно
+        })
+        .catch(error => console.error('Ошибка при загрузке объектов:', error));
+}
+
+// Функция для закрытия модального окна
+function closeGroundUnitsModal() {
+    document.getElementById('groundUnitsModal').style.display = 'none';
+}
+
+// Функция для загрузки выбранных наземных объектов
+function loadSelectedGroundUnits() {
+    groundUnitsLayer.clearLayers();
+
+    const checkboxes = document.querySelectorAll('#checkboxContainer input[type="checkbox"]:checked');
+    checkboxes.forEach(checkbox => {
+        const unit = groundUnits.find(u => u.title === checkbox.value);
+        if (unit) {
+            const priority = document.getElementById(`priority-${unit.title}`).value;
+
+            // Определяем цвет маркера в зависимости от приоритета
+            let color;
+            if (priority === 'high') color = 'red';
+            else if (priority === 'medium') color = 'yellow';
+            else color = 'green';
+
+            // Создаем маркер с учетом цвета приоритета
+            var marker = L.circleMarker([unit.lat, unit.lon], {
+                color: color,
+                radius: 8
+            }).bindPopup(
+                `<b>${unit.title}</b><br>Приоритет: ${priority}<br>Широта: ${unit.lat}<br>Долгота: ${unit.lon}`
+            );
+
+            marker.addTo(groundUnitsLayer);
+        }
+    });
+
+    closeGroundUnitsModal();
+}
+
+function loadSelectedGroundUnits() {
+    groundUnitsLayer.clearLayers(); // Очистка слоя перед добавлением новых маркеров
+
+    const checkboxes = document.querySelectorAll('#checkboxContainer input[type="checkbox"]:checked');
+    checkboxes.forEach(checkbox => {
+        const unit = groundUnits.find(u => u.title === checkbox.value);
+        if (unit) {
+            const priority = document.getElementById(`priority-${unit.title}`).value;
+            // Проверка приоритета и установка цвета
+            let priorityColor;
+            let Prioritet;
+            if (priority === 'high'){
+             priorityColor = 'red';
+             Prioritet = 'высокий';
+            }
+            else if (priority === 'medium'){
+             priorityColor = 'yellow';
+             Prioritet = 'средний';
+            }
+            else{
+             priorityColor = 'green';
+             Prioritet = 'низкий';
+            }
+
+            // Создаем маркер для выбранного объекта с указанным цветом
+            const marker = L.circleMarker([unit.lat, unit.lon], {
+                color: priorityColor,  // Цвет контура
+                fillColor: priorityColor,  // Цвет заливки
+                fillOpacity: 0.5,
+                radius: 8
+            }).bindPopup(
+                `<b>${unit.title}</b><br>Приоритет: ${Prioritet}`
+            );
+
+            marker.addTo(groundUnitsLayer); // Добавляем маркер на слой
+        }
+    });
+
+    closeGroundUnitsModal(); // Закрываем модальное окно после загрузки объектов
+}
+         function openSatelliteModal() {
+            document.getElementById('satelliteContainer').innerHTML = ''; // Очищаем контейнер
+
+            fetch('/get_satellites')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(path => {
+                        // Создаем чекбокс для каждого спутника
+                        var checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.id = path.title; // Используем путь в качестве id
+                        checkbox.value = path.title; // Сохраняем значение
+
+                        var label = document.createElement('label');
+                        label.htmlFor = path.title;
+                        label.textContent = path.title;
+
+                        var div = document.createElement('div');
+                        div.className = 'checkbox';
+                        div.appendChild(checkbox);
+                        div.appendChild(label);
+                        document.getElementById('satelliteContainer').appendChild(div);
+                    });
+
+                    document.getElementById('satelliteModal').style.display = 'block'; // Показываем модальное окно
+                })
+                .catch(error => console.error('Ошибка при загрузке спутников:', error));
+        }
+
+        // Функция для закрытия модального окна спутников
+        function closeSatelliteModal() {
+            document.getElementById('satelliteModal').style.display = 'none'; // Скрываем модальное окно
+        }
+
+
+// Объект для хранения маркеров спутников
+var satelliteMarkers = {};
+// Объект для хранения полилиний спутников
+var satelliteTrajectories = {};
+// Переменная для хранения ID интервала обновления
+var updateInterval = null;
+
+// Функция для загрузки выбранных спутников
+function loadSelectedSatellites() {
+    const checkboxes = document.querySelectorAll('#satelliteContainer input[type="checkbox"]:checked');
+    const selectedPaths = Array.from(checkboxes).map(checkbox => checkbox.value);
+
+    // Очищаем предыдущий интервал, если он существует
+    if (updateInterval) {
+        clearInterval(updateInterval);
+    }
+
+    // Удаляем маркеры спутников, которые не были выбраны
+    Object.keys(satelliteMarkers).forEach(title => {
+        if (!selectedPaths.includes(title)) {
+            map.removeLayer(satelliteMarkers[title]); // Удаляем маркер с карты
+            delete satelliteMarkers[title];           // Удаляем маркер из объекта
+        }
+    });
+
+    // Удаляем предыдущие траектории
+    Object.keys(satelliteTrajectories).forEach(title => {
+        if (!selectedPaths.includes(title)) {
+            map.removeLayer(satelliteTrajectories[title]); // Удаляем полилинию с карты
+            delete satelliteTrajectories[title];           // Удаляем полилинию из объекта
+        }
+    });
+
+    // Отправляем выбранные спутники на сервер
+    fetch('/get_selected_satellites', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ selected_paths: selectedPaths }),
+    })
+    .then(response => response.json())
+    .then(data => {
+        console.log('Выбранные спутники:', data); // Обработка выбранных спутников
+        closeSatelliteModal(); // Закрываем модальное окно после загрузки
+
+        // Начинаем обновление позиций только выбранных спутников
+        updateSatellitePositions(selectedPaths);
+
+        document.getElementById('rollPitchSliders').style.display = 'block';
+
+        // Устанавливаем значения ползунков по умолчанию из ответа сервера
+        const defaultRoll = parseFloat(data[0].Roll_str.split('[')[0]);  // Пример: "0.00000000[-40.00000000;40.00000000]"
+        const defaultPitch = parseFloat(data[0].Pitch_str.split('[')[0]);
+
+        document.getElementById('rollSlider').value = defaultRoll;
+        document.getElementById('pitchSlider').value = defaultPitch;
+        document.getElementById('rollValue').textContent = defaultRoll.toFixed(1);
+        document.getElementById('pitchValue').textContent = defaultPitch.toFixed(1);
+
+        // Получаем траекторию для каждого выбранного спутника и отрисовываем на карте
+        selectedPaths.forEach(title => {
+            fetch('/get_satellite_past_trajectory', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ title }), // Отправляем title каждого выбранного спутника
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error(`Ошибка HTTP: ${response.status}`);
+                }
+                return response.json();
+            })
+            .then(trajectory => {
+                // Отладка: выводим полученные данные траектории
+                console.log(`Траектория для спутника ${title}:`, trajectory);
+
+                // Проверка на наличие данных в траектории
+                if (!trajectory || !trajectory.trajectory || !Array.isArray(trajectory.trajectory) || trajectory.trajectory.length === 0) {
+                    console.warn(`Нет данных для траектории спутника ${title}`);
+                    return;
+                }
+
+                // Отрисовываем траекторию на карте
+                drawSatelliteTrajectory(trajectory.trajectory, title); // Передаем название спутника
+
+                // Вызываем функцию отрисовки зоны радиовидимости для каждого спутника
+                updateVisibilityZone(title, roll, pitch);
+            })
+            .catch(error => console.error(`Ошибка при получении траектории спутника ${title}:`, error));
+        });
+
+        // Устанавливаем новый интервал обновления
+         updateInterval = setInterval(() => {
+            const roll = parseFloat(document.getElementById('rollSlider').value);
+            const pitch = parseFloat(document.getElementById('pitchSlider').value);
+            updateSatellitePositions(selectedPaths);
+            selectedPaths.forEach(title => {
+                updateVisibilityZone(title, roll, pitch); // Обновляем зону радиовидимости для каждого спутника
+            });
+        }, 1000);
+    })
+    .catch(error => console.error('Ошибка при загрузке спутников:', error));
+}
+document.getElementById('rollSlider').addEventListener('input', function() {
+    document.getElementById('rollValue').textContent = this.value;
+});
+
+document.getElementById('pitchSlider').addEventListener('input', function() {
+    document.getElementById('pitchValue').textContent = this.value;
+});
+
+// Функция для отрисовки траектории спутника с учетом выхода за границы карты
+function drawSatelliteTrajectory(trajectory, title) {
+    if (!trajectory || !Array.isArray(trajectory)) {
+        console.warn('Траектория невалидна:', trajectory);
+        return;
+    }
+
+    // Проверка и обработка координат
+    const latLngs = [];
+    let segment = [];
+    let previousPoint = null;
+
+    trajectory.forEach(point => {
+        // Ограничиваем координаты
+        const lat = Math.max(-90, Math.min(90, point.lat));
+        let lon = point.lon;
+
+        // Проверяем пересечение долготы ±180° и корректируем
+        if (previousPoint) {
+            const deltaLon = Math.abs(lon - previousPoint.lon);
+
+            if (deltaLon > 180) {
+                // Завершаем текущий сегмент и начинаем новый
+                if (segment.length > 0) {
+                    latLngs.push(segment);
+                    segment = [];
+                }
+            }
+        }
+
+        segment.push([lat, lon]);
+        previousPoint = { lat, lon };
+    });
+
+    // Добавляем последний сегмент, если он существует
+    if (segment.length > 0) {
+        latLngs.push(segment);
+    }
+
+    console.log('Сегменты координат для отрисовки:', latLngs); // Отладка
+
+    // Удаляем предыдущую траекторию, если она существует
+    if (satelliteTrajectories[title]) {
+        map.removeLayer(satelliteTrajectories[title]);
+    }
+
+    // Создаем новую полилинию для каждого сегмента и добавляем на карту
+    const polylines = latLngs.map(segment =>
+        L.polyline(segment, { color: 'blue', noWrap: true }).addTo(map)
+    );
+
+    // Сохраняем все сегменты полилиний в объекте для дальнейшего использования
+    satelliteTrajectories[title] = L.layerGroup(polylines);
+    satelliteTrajectories[title].addTo(map);
+
+    console.log('Полилинии добавлены на карту'); // Отладка
+}
+
+
+function updateSatellitePositions(selectedPaths) {
+    // Обновляем позиции только для выбранных спутников
+    if (selectedPaths.length === 0) return;
+
+    selectedPaths.forEach(title => {
+        fetch('/get_satellite_positions', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({ title }),
+        })
+        .then(response => {
+            if (!response.ok) {
+                throw new Error(`Ошибка HTTP: ${response.status}`);
+            }
+            return response.json();
+        })
+        .then(satellite => {
+            // Проверяем, существует ли уже маркер для этого спутника
+            if (satelliteMarkers[satellite.title]) {
+                // Если маркер существует, обновляем его положение
+                satelliteMarkers[satellite.title].setLatLng([satellite.lat, satellite.lon]);
+            } else {
+                // Если маркера еще нет, создаем его и добавляем на карту
+                let marker = L.marker([satellite.lat, satellite.lon])
+                    .bindPopup(satellite.title)
+                    .addTo(map);
+                satelliteMarkers[satellite.title] = marker;
+            }
+        })
+        .catch(error => console.error(`Ошибка при обновлении позиции спутника ${title}:`, error));
+    });
+}
+var satelliteVisibilityZones = [];
+
+function normalizeLongitude(lon) {
+    if (lon < -180) {
+        return lon + 360;
+    } else if (lon > 180) {
+        return lon - 360;
+    }
+    return lon;
+}
+
+function updateVisibilityZone(title, roll = 0, pitch = 0) {
+    console.log('Вызов updateVisibilityZone с параметрами:', { title, roll, pitch });
+
+    fetch('/get_visibility_zone', {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ title, roll, pitch }),
+    })
+    .then(response => {
+        if (!response.ok) {
+            return response.text().then(errorText => {
+                throw new Error(`Ошибка HTTP: ${response.status} - ${errorText}`);
+            });
+        }
+        return response.json();
+    })
+    .then(data => {
+        console.log('Полученные данные зоны радиовидимости:', data);
+        const coords = data.visibility_zone;
+
+        if (!Array.isArray(coords) || coords.length === 0) {
+            console.warn('Невалидные координаты зоны радиовидимости:', coords);
+            return;
+        }
+
+        // Преобразование координат с обработкой перехода границы карты
+        const latLngs = [];
+        let previousPoint = null;
+
+        coords.forEach(point => {
+            if (previousPoint) {
+                const deltaLon = Math.abs(point[1] - previousPoint[1]);
+
+                // Если разница долготы больше 180 градусов, корректируем её
+                if (deltaLon > 180) {
+                    if (point[1] > previousPoint[1]) {
+                        point[1] -= 360;
+                    } else {
+                        point[1] += 360;
+                    }
+                }
+            }
+
+            latLngs.push([point[0], point[1]]);
+            previousPoint = point;
+        });
+
+        console.log('Координаты зоны радиовидимости для отрисовки:', latLngs);
+
+        if (satelliteVisibilityZones[title]) {
+            satelliteVisibilityZones[title].setLatLngs(latLngs);
+            console.log(`Полигон зоны видимости для спутника ${title} обновлен.`);
+        } else {
+            const visibilityZonePolygon = L.polygon(latLngs, { color: 'red', fillOpacity: 0.3 }).addTo(map);
+            visibilityZonePolygon.bindPopup(`Зона радиовидимости спутника: ${title}`);
+            satelliteVisibilityZones[title] = visibilityZonePolygon;
+
+            console.log(`Новый полигон зоны видимости для спутника ${title} добавлен на карту.`);
+        }
+    })
+    .catch(error => {
+        console.error(`Ошибка при обновлении зоны радиовидимости для спутника ${title}:`, error);
+    });
+}
+
+
+
+
+
+        // Кастомный атрибут для масштаба карты
+        var customAttribution = L.control({ position: 'bottomright' });
+        customAttribution.onAdd = function () {
+            var div = L.DomUtil.create('div', 'custom-attribution');
+            div.innerHTML = 'Масштаб: ' + calculateScale(map.getZoom());
+            return div;
+        };
+        customAttribution.addTo(map);
+
+        function calculateScale(zoom) {
+            var scale = 591657550.5 / Math.pow(2, zoom);
+            return '1:' + Math.round(scale);
+        }
+
+        map.on('zoomend', function () {
+            var attributionDiv = document.querySelector('.custom-attribution');
+            attributionDiv.innerHTML = 'Масштаб: ' + calculateScale(map.getZoom());
+        });
+
+       var drawnItems = new L.FeatureGroup();
+        map.addLayer(drawnItems);
+
+        // Добавляем инструменты рисования
+        var drawControl = new L.Control.Draw({
+            position: 'topright',
+            draw: {
+                polygon: true,
+                rectangle: true,
+                circle: false,
+                polyline: false,
+                marker: false
+            },
+            edit: {
+                featureGroup: drawnItems,
+                remove: true
+            }
+        });
+        map.addControl(drawControl);
+
+        // Обработка события добавления нового полигона
+        map.on('draw:created', function (event) {
+            var layer = event.layer;
+            drawnItems.addLayer(layer);  // Добавляем новый слой в группу
+        });
+
+        // Функция для сохранения координат в GeoJSON файл
+        function saveCoords() {
+            var data = drawnItems.toGeoJSON();  // Преобразуем в формат GeoJSON
+            fetch('/save_coords', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(data),  // Отправляем данные на сервер
+            })
+            .then(response => response.json())
+            .then(data => {
+                alert(data.message);  // Показываем сообщение об успешном сохранении
+            });
+        }
+
+    </script>
+</body>
+</html>
