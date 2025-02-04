@@ -13,9 +13,16 @@ from astropy.time import Time
 
 app = Flask(__name__)
 
-MBTILES_FILE = "D:\maps\OAM-World-1-11-J80.mbtiles"
+# Получаем базовый путь к проекту
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
+# Путь к файлу карты относительно корня проекта
+MBTILES_FILE = os.path.join(BASE_DIR, "map", "OAM-World-1-8-min-J80.mbtiles")
 
+if not os.path.exists(MBTILES_FILE):
+    raise FileNotFoundError(f"Карта не найдена по пути: {MBTILES_FILE}. "
+                          f"Убедитесь, что файл карты находится в папке 'map' "
+                          f"в корне проекта.")
 
 @app.route('/3d')
 def three_d_tracking():
@@ -435,7 +442,19 @@ def submit():
 
 
 def load_groundunits_ini():
-    ini_path = "D:/c-+++/604.2/static/data/groundunits/groundunits.ini"
+    # Получаем базовый путь к проекту
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    
+    # Путь к файлу groundunits.ini относительно папки static
+    ini_path = os.path.join(BASE_DIR, "static", "data", "groundunits", "groundunits.ini")
+    
+    # Путь к папке static для замены WORKPATH
+    static_path = os.path.join(BASE_DIR, "static")
+    
+    # Проверка существования файла
+    if not os.path.exists(ini_path):
+        raise FileNotFoundError(f"Файл groundunits.ini не найден по пути: {ini_path}")
+    
     config = configparser.ConfigParser()
     config.read(ini_path, encoding='windows-1251')
     ground_units_paths = []
@@ -443,8 +462,8 @@ def load_groundunits_ini():
     for section in config.sections():
         if section.startswith("NKPOR_"):
             for _, path in config.items(section):
-                # Формируем полный путь к папке объекта
-                full_path = path.split()[0].replace("WORKPATH", "D:/c-+++/604.2/static")
+                # Заменяем WORKPATH на относительный путь к static
+                full_path = path.split()[0].replace("WORKPATH", static_path)
                 ground_units_paths.append(full_path)
 
     return ground_units_paths
@@ -499,7 +518,19 @@ def get_selected_ground_units():
 
 
 def load_satellites_ini():
-    ini_path = "D:/c-+++/604.2/static/data/satellites/satellites.ini"
+    # Получаем базовый путь к проекту
+    BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+    
+    # Путь к файлу satellites.ini относительно папки static
+    ini_path = os.path.join(BASE_DIR, "static", "data", "satellites", "satellites.ini")
+    
+    # Путь к папке static для замены WORKPATH
+    static_path = os.path.join(BASE_DIR, "static")
+    
+    # Проверка существования файла
+    if not os.path.exists(ini_path):
+        raise FileNotFoundError(f"Файл satellites.ini не найден по пути: {ini_path}")
+
     config = configparser.ConfigParser()
     config.read(ini_path, encoding='windows-1251')
     satellites_paths = []
@@ -507,8 +538,8 @@ def load_satellites_ini():
     for section in config.sections():
         if section.startswith("P-V"):
             for _, path in config.items(section):
-                # Формируем полный путь к папке объекта
-                full_path = path.split()[0].replace("WORKPATH", "D:/c-+++/604.2/static")
+                # Формируем полный путь относительно static
+                full_path = path.split()[0].replace("WORKPATH", static_path)
                 satellites_paths.append(full_path)
 
     return satellites_paths
