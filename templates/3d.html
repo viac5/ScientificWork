@@ -43,6 +43,9 @@
     <button onclick="toggleBackground()" style="position: fixed; top: 90px; left: 10px; z-index: 100;">
         Сменить фон
     </button>
+    <button onclick="toggleTrajectory()" style="position: fixed; top: 130px; left: 10px; z-index: 100;">
+        Траектория
+    </button>
 
     <div id="satelliteModal" class="satellite-modal">
         <h3>Выберите спутники</h3>
@@ -315,6 +318,15 @@
             camera.updateProjectionMatrix();
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
+
+        let trajectoryVisible = true;
+
+        function toggleTrajectory() {
+            trajectoryVisible = !trajectoryVisible;
+            Object.values(trajectoryObjects).forEach(trajectory => {
+                trajectory.visible = trajectoryVisible;
+            });
+        }
     </script>
 </body>
 </html>
