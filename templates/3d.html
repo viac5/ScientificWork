@@ -1,37 +1,320 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>3D Tracking</title>
+    <title>3D Отслеживание</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
     <style>
         body { margin: 0; overflow: hidden; }
+        
+        .satellite-modal {
+            position: fixed;
+            top: 10%;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            z-index: 1000;
+            display: none;
+        }
+
+        button {
+            padding: 10px 15px;
+            background-color: #6c757d;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            cursor: pointer;
+            margin: 5px;
+        }
     </style>
 </head>
 <body>
+    <button onclick="openSatelliteModal()" style="position: fixed; top: 10px; left: 10px; z-index: 100;">
+        Выбрать спутники
+    </button>
+    <button onclick="toggleDayNight()" style="position: fixed; top: 50px; left: 10px; z-index: 100;">
+        День/Ночь
+    </button>
+    <button onclick="toggleBackground()" style="position: fixed; top: 90px; left: 10px; z-index: 100;">
+        Сменить фон
+    </button>
+
+    <div id="satelliteModal" class="satellite-modal">
+        <h3>Выберите спутники</h3>
+        <div id="satelliteContainer"></div>
+        <div class="modal-buttons">
+            <button onclick="loadSelectedSatellites()">Загрузить</button>
+            <button onclick="closeSatelliteModal()">Закрыть</button>
+        </div>
+    </div>
+
     <script>
-        // Инициализация сцены
+        // Scene initialization
         const scene = new THREE.Scene();
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer();
+        const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // Земля
-        const earthGeometry = new THREE.SphereGeometry(1, 32, 32);
-        const earthMaterial = new THREE.MeshBasicMaterial({ color: 0x0077be });
+        // Орбитальные контролы
+        const controls = new THREE.OrbitControls(camera, renderer.domElement);
+        controls.enableDamping = true;
+        controls.dampingFactor = 0.05;
+        controls.minDistance = 2;
+        controls.maxDistance = 10;
+
+        // Загрузка текстур
+        const textureLoader = new THREE.TextureLoader();
+        const dayTexture = textureLoader.load('/static/textures/earth_daymap.jpg');
+        const nightTexture = textureLoader.load('/static/textures/earth_nightmap.jpg');
+        const cloudsTexture = textureLoader.load('/static/textures/earth_clouds.png');
+        const milkyWayTexture = textureLoader.load('/static/textures/milkyway.jpg');
+        const starsTexture = textureLoader.load('/static/textures/stars.jpg');
+
+        let isDay = true;
+        let currentBackgroundTexture = milkyWayTexture;
+
+        // Background creation
+        const spaceGeometry = new THREE.SphereGeometry(90, 32, 32);
+        const spaceMaterial = new THREE.MeshBasicMaterial({
+            map: currentBackgroundTexture,
+            side: THREE.BackSide
+        });
+        const space = new THREE.Mesh(spaceGeometry, spaceMaterial);
+        scene.add(space);
+
+        // Earth creation
+        const earthGeometry = new THREE.SphereGeometry(1, 64, 64);
+        const earthMaterial = new THREE.MeshPhongMaterial({
+            map: dayTexture,
+            specular: new THREE.Color(0x333333),
+            shininess: 25
+        });
         const earth = new THREE.Mesh(earthGeometry, earthMaterial);
         scene.add(earth);
 
-        // Камера и анимация
+        // Clouds creation
+        const cloudsGeometry = new THREE.SphereGeometry(1.01, 64, 64);
+        const cloudsMaterial = new THREE.MeshPhongMaterial({
+            map: cloudsTexture,
+            transparent: true,
+            opacity: 0.8
+        });
+        const clouds = new THREE.Mesh(cloudsGeometry, cloudsMaterial);
+        earth.add(clouds);
+
+        // Lighting
+        const sunLight = new THREE.DirectionalLight(0xffffff, 1);
+        sunLight.position.set(5, 3, 5);
+        scene.add(sunLight);
+
+        const ambientLight = new THREE.AmbientLight(0x404040);
+        scene.add(ambientLight);
+
+        // Create detailed satellite model
+        function createSatelliteModel() {
+            const satelliteGroup = new THREE.Group();
+
+            // Main body
+            const bodyGeometry = new THREE.BoxGeometry(0.015, 0.015, 0.03);
+            const bodyMaterial = new THREE.MeshPhongMaterial({
+                color: 0x808080,
+                shininess: 100,
+                specular: 0x444444
+            });
+            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
+            satelliteGroup.add(body);
+
+            // Solar panels
+            const panelGeometry = new THREE.BoxGeometry(0.06, 0.03, 0.001);
+            const panelMaterial = new THREE.MeshPhongMaterial({
+                color: 0x2244ff,
+                shininess: 50,
+                specular: 0x222222
+            });
+
+            const leftPanel = new THREE.Mesh(panelGeometry, panelMaterial);
+            leftPanel.position.x = -0.035;
+            satelliteGroup.add(leftPanel);
+
+            const rightPanel = new THREE.Mesh(panelGeometry, panelMaterial);
+            rightPanel.position.x = 0.035;
+            satelliteGroup.add(rightPanel);
+
+            // Antenna
+            const antennaGeometry = new THREE.CylinderGeometry(0.001, 0.001, 0.02);
+            const antennaMaterial = new THREE.MeshPhongMaterial({
+                color: 0xcccccc,
+                shininess: 80,
+                specular: 0x444444
+            });
+            const antenna = new THREE.Mesh(antennaGeometry, antennaMaterial);
+            antenna.rotation.x = Math.PI / 2;
+            antenna.position.z = 0.02;
+            satelliteGroup.add(antenna);
+
+            // Additional details
+            const detailGeometry = new THREE.BoxGeometry(0.008, 0.008, 0.008);
+            const detailMaterial = new THREE.MeshPhongMaterial({
+                color: 0x666666,
+                shininess: 60,
+                specular: 0x333333
+            });
+
+            const topDetail = new THREE.Mesh(detailGeometry, detailMaterial);
+            topDetail.position.y = 0.01;
+            satelliteGroup.add(topDetail);
+
+            const bottomDetail = new THREE.Mesh(detailGeometry, detailMaterial);
+            bottomDetail.position.y = -0.01;
+            satelliteGroup.add(bottomDetail);
+
+            return satelliteGroup;
+        }
+
+        // Переключение фона
+        function toggleBackground() {
+            currentBackgroundTexture = 
+                currentBackgroundTexture === milkyWayTexture ? starsTexture : milkyWayTexture;
+            spaceMaterial.map = currentBackgroundTexture;
+            spaceMaterial.needsUpdate = true;
+        }
+
+        // День/Ночь переключение
+        function toggleDayNight() {
+            isDay = !isDay;
+            earthMaterial.map = isDay ? dayTexture : nightTexture;
+            earthMaterial.needsUpdate = true;
+            sunLight.intensity = isDay ? 1 : 0.3;
+            ambientLight.intensity = isDay ? 0.4 : 0.1;
+        }
+
+        // Satellite objects storage
+        const satelliteObjects = {};
+        let updateInterval = null;
+
+        // Satellite selection modal functions
+        function openSatelliteModal() {
+            document.getElementById('satelliteContainer').innerHTML = '';
+
+            fetch('/get_satellites')
+                .then(response => response.json())
+                .then(data => {
+                    data.forEach(path => {
+                        const checkbox = document.createElement('input');
+                        checkbox.type = 'checkbox';
+                        checkbox.id = path.title;
+                        checkbox.value = path.title;
+
+                        const label = document.createElement('label');
+                        label.htmlFor = path.title;
+                        label.textContent = path.title;
+
+                        const div = document.createElement('div');
+                        div.appendChild(checkbox);
+                        div.appendChild(label);
+                        document.getElementById('satelliteContainer').appendChild(div);
+                    });
+
+                    document.getElementById('satelliteModal').style.display = 'block';
+                });
+        }
+
+        function closeSatelliteModal() {
+            document.getElementById('satelliteModal').style.display = 'none';
+        }
+
+        function loadSelectedSatellites() {
+            const checkboxes = document.querySelectorAll('#satelliteContainer input[type="checkbox"]:checked');
+            const selectedPaths = Array.from(checkboxes).map(checkbox => checkbox.value);
+
+            if (updateInterval) {
+                clearInterval(updateInterval);
+            }
+
+            Object.keys(satelliteObjects).forEach(title => {
+                if (!selectedPaths.includes(title)) {
+                    scene.remove(satelliteObjects[title]);
+                    delete satelliteObjects[title];
+                }
+            });
+
+            updateInterval = setInterval(() => {
+                updateSatellitePositions(selectedPaths);
+            }, 1000);
+
+            closeSatelliteModal();
+        }
+
+        function updateSatellitePositions(selectedPaths) {
+            selectedPaths.forEach(title => {
+                fetch('/get_satellite_positions', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({ title }),
+                })
+                .then(response => response.json())
+                .then(satellite => {
+                    const lat = satellite.lat * (Math.PI / 180);
+                    const lon = satellite.lon * (Math.PI / 180);
+                    const radius = 1.5;
+
+                    const x = radius * Math.cos(lat) * Math.cos(lon);
+                    const y = radius * Math.cos(lat) * Math.sin(lon);
+                    const z = radius * Math.sin(lat);
+
+                    
+                    if (!satelliteObjects[title]) {
+                        satelliteObjects[title] = createSatelliteModel();
+                        scene.add(satelliteObjects[title]);
+                    }
+
+                    satelliteObjects[title].position.set(x, y, z);
+                    // Orient satellite towards Earth's center
+                    satelliteObjects[title].lookAt(0, 0, 0);
+                    satelliteObjects[title].rotateX(Math.PI / 2);
+                });
+            });
+        }
+
+        // Camera position and animation
         camera.position.z = 5;
-        function animate() {
+        
+        // Расчет скорости вращения Земли
+        const EARTH_ROTATION_PERIOD = 24 * 60 * 60; // секунды в сутках
+        const EARTH_ROTATION_SPEED = (2 * Math.PI) / EARTH_ROTATION_PERIOD; // радиан в секунду
+
+        let lastTime = 0;
+        function animate(currentTime) {
             requestAnimationFrame(animate);
-            earth.rotation.y += 0.01; // Вращение Земли
+            
+            // Вычисление дельты времени для плавного вращения
+            const deltaTime = (currentTime - lastTime) / 1000; // в секундах
+            lastTime = currentTime;
+
+            controls.update();
+            
+            // Применение реальной скорости вращения
+            earth.rotation.y += EARTH_ROTATION_SPEED * deltaTime;
+            clouds.rotation.y += EARTH_ROTATION_SPEED * deltaTime * 1.1; // облака немного быстрее
+            
             renderer.render(scene, camera);
         }
-        animate();
+        animate(0);
+
+        // Handle window resize
+        window.addEventListener('resize', () => {
+            camera.aspect = window.innerWidth / window.innerHeight;
+            camera.updateProjectionMatrix();
+            renderer.setSize(window.innerWidth, window.innerHeight);
+        });
     </script>
 </body>
 </html>
