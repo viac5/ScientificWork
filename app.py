@@ -278,6 +278,7 @@ def get_satellite_positions():
             'title': satellite['title'],
             'lat': lat,
             'lon': lon,
+            'radius': r,
         }
 
         return jsonify(position)
@@ -343,13 +344,10 @@ def get_satellite_past_trajectory():
                 'time': current_time - t,  # Время точки
                 'lat': lat,
                 'lon': lon,
+                'radius': r,
             })
             #print(f"t: {t}, lat: {lat}, lon: {lon}, r: {r}")  # Вывод для отладки
-            trajectory_points.append({
-                'time': current_time - t,
-                'lat': lat,
-                'lon': lon,
-            })
+            
 
         # Формируем ответ с траекторией спутника
         trajectory = {
@@ -688,18 +686,18 @@ def read_satellite_radars():
         satellite_ini_path = os.path.join(path, satellite_file)
 
         # Логирование поиска файла
-        logging.info(f"Пытаемся загрузить файл: {satellite_ini_path}")
+        #logging.info(f"Пытаемся загрузить файл: {satellite_ini_path}")
 
         if os.path.exists(satellite_ini_path):
             # Считываем данные из ini файла спутника
             satellite_data = load_satellite_data(satellite_ini_path)
             satellite_paths.append(satellite_data)
-            logging.info(f"Данные для спутника {i} загружены.")
+            #logging.info(f"Данные для спутника {i} загружены.")
         else:
             logging.warning(f"Файл {satellite_ini_path} не найден.")
 
     # Логирование завершения работы функции
-    logging.info(f"Загружено данных для {len(satellite_paths)} спутников.")
+    #logging.info(f"Загружено данных для {len(satellite_paths)} спутников.")
 
     return satellite_paths
 
@@ -707,8 +705,6 @@ def read_satellite_radars():
 @app.route('/get_satellites', methods=['GET'])
 def get_satellite_paths():
     data = read_satellite_paths()
-    test = read_satellite_radars()
-    print(test)
     #print("Отправляем спутники:", data)  # Для отладки
     return jsonify(data)
 
@@ -716,10 +712,10 @@ def get_satellite_paths():
 @app.route('/get_selected_satellites', methods=['POST'])
 def get_selected_satellites():
     selected_ids = request.json.get('selected_paths', [])
-    print("Получены выбранные пути:", selected_ids)  # Для отладки
+    #print("Получены выбранные пути:", selected_ids)  # Для отладки
     all_satellites = read_satellite_paths()
     selected_units = [unit for unit in all_satellites if unit['title'] in selected_ids]
-    print("Отправляем спутники:", selected_units)  # Для отладки
+    #print("Отправляем спутники:", selected_units)  # Для отладки
 
     return jsonify(selected_units)
 

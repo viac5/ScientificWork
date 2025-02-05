@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="ru">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,8 +8,11 @@
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
     <style>
-        body { margin: 0; overflow: hidden; }
-        
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+
         .satellite-modal {
             position: fixed;
             top: 10%;
@@ -17,7 +21,7 @@
             background-color: white;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0,0,0,0.2);
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
             z-index: 1000;
             display: none;
         }
@@ -33,6 +37,7 @@
         }
     </style>
 </head>
+
 <body>
     <button onclick="openSatelliteModal()" style="position: fixed; top: 10px; left: 10px; z-index: 100;">
         Выбрать спутники
@@ -119,6 +124,84 @@
         const ambientLight = new THREE.AmbientLight(0x404040);
         scene.add(ambientLight);
 
+        const trajectoryObjects = {};
+        const EARTH_RADIUS = 1; // Радиус Земли в условных единицах
+        const TRAJECTORY_HEIGHT = 1.5; // Высота траектории над поверхностью
+        const satelliteColors = {};
+        const predefinedColors = [
+            0x00ff00, // green
+            0xff0000, // red
+            0x0000ff, // blue
+            0xffff00, // yellow
+            0xff00ff, // magenta
+            0x00ffff, // cyan
+            0xff8000, // orange
+            0x8000ff  // purple
+        ];
+
+        function getColorForSatellite(title) {
+            if (!satelliteColors[title]) {
+                // Assign next color from predefined colors, or generate random if all used
+                const unusedColors = predefinedColors.filter(color =>
+                    !Object.values(satelliteColors).includes(color));
+
+                satelliteColors[title] = unusedColors.length > 0
+                    ? unusedColors[0]
+                    : Math.random() * 0xffffff;
+            }
+            return satelliteColors[title];
+        }
+        // Основная функция построения траектории
+        function drawSatellitePastTrajectory(title) {
+            fetch('/get_satellite_past_trajectory', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ title })
+            })
+                .then(response => response.json())
+                .then(data => {
+                    // Удаляем старую траекторию если она существует
+                    if (trajectoryObjects[title]) {
+                        scene.remove(trajectoryObjects[title]);
+                    }
+
+                    const positions = [];
+                    data.trajectory.forEach(point => {
+                        // Конвертация географических координат в 3D
+                        const lat = point.lat * (Math.PI / 180);
+                        const lon = point.lon * (Math.PI / 180);
+
+                        // Расчет позиции в 3D пространстве
+                        const x = point.radius/6371 * Math.cos(lat) * Math.cos(lon);
+                        const y = point.radius/6371 * Math.cos(lat) * Math.sin(lon);
+                        const z = point.radius/6371 * Math.sin(lat);
+
+                        positions.push(x, y, z);
+                    });
+
+                    // Создание геометрии линии
+                    const geometry = new THREE.BufferGeometry();
+                    geometry.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+
+                    // Создание материала линии
+                    const material = new THREE.LineBasicMaterial({
+                        color: getColorForSatellite(title),
+                        linewidth: 2,
+                        opacity: 0.7,
+                        transparent: true
+                    });
+
+                    // Создание линии траектории
+                    const trajectoryLine = new THREE.Line(geometry, material);
+                    trajectoryObjects[title] = trajectoryLine;
+                    scene.add(trajectoryLine);
+                })
+                .catch(error => console.error('Ошибка получения траектории:', error));
+        }
+
+
         // Create detailed satellite model
         function createSatelliteModel() {
             const satelliteGroup = new THREE.Group();
@@ -182,7 +265,7 @@
 
         // Переключение фона
         function toggleBackground() {
-            currentBackgroundTexture = 
+            currentBackgroundTexture =
                 currentBackgroundTexture === milkyWayTexture ? starsTexture : milkyWayTexture;
             spaceMaterial.map = currentBackgroundTexture;
             spaceMaterial.needsUpdate = true;
@@ -263,33 +346,36 @@
                     },
                     body: JSON.stringify({ title }),
                 })
-                .then(response => response.json())
-                .then(satellite => {
-                    const lat = satellite.lat * (Math.PI / 180);
-                    const lon = satellite.lon * (Math.PI / 180);
-                    const radius = 1.5;
+                    .then(response => response.json())
+                    .then(satellite => {
+                        const lat = satellite.lat * (Math.PI / 180);
+                        const lon = satellite.lon * (Math.PI / 180);
+                        const radius = satellite.radius/6371;
+                        
+                        console.log(`Satellite: ${title}`);
+                        console.log(`Raw radius: ${satellite.radius} km`);
 
-                    const x = radius * Math.cos(lat) * Math.cos(lon);
-                    const y = radius * Math.cos(lat) * Math.sin(lon);
-                    const z = radius * Math.sin(lat);
+                        const x = radius * Math.cos(lat) * Math.cos(lon);
+                        const y = radius * Math.cos(lat) * Math.sin(lon);
+                        const z = radius * Math.sin(lat);
 
-                    
-                    if (!satelliteObjects[title]) {
-                        satelliteObjects[title] = createSatelliteModel();
-                        scene.add(satelliteObjects[title]);
-                    }
 
-                    satelliteObjects[title].position.set(x, y, z);
-                    // Orient satellite towards Earth's center
-                    satelliteObjects[title].lookAt(0, 0, 0);
-                    satelliteObjects[title].rotateX(Math.PI / 2);
-                });
+                        if (!satelliteObjects[title]) {
+                            satelliteObjects[title] = createSatelliteModel();
+                            scene.add(satelliteObjects[title]);
+                        }
+
+                        satelliteObjects[title].position.set(x, y, z);
+                        // Orient satellite towards Earth's center
+                        satelliteObjects[title].lookAt(0, 0, 0);
+                        satelliteObjects[title].rotateX(Math.PI / 2);
+                    });
             });
         }
 
         // Camera position and animation
         camera.position.z = 5;
-        
+
         // Расчет скорости вращения Земли
         const EARTH_ROTATION_PERIOD = 24 * 60 * 60; // секунды в сутках
         const EARTH_ROTATION_SPEED = (2 * Math.PI) / EARTH_ROTATION_PERIOD; // радиан в секунду
@@ -297,17 +383,17 @@
         let lastTime = 0;
         function animate(currentTime) {
             requestAnimationFrame(animate);
-            
+
             // Вычисление дельты времени для плавного вращения
             const deltaTime = (currentTime - lastTime) / 1000; // в секундах
             lastTime = currentTime;
 
             controls.update();
-            
+
             // Применение реальной скорости вращения
             earth.rotation.y += EARTH_ROTATION_SPEED * deltaTime;
             clouds.rotation.y += EARTH_ROTATION_SPEED * deltaTime * 1.1; // облака немного быстрее
-            
+
             renderer.render(scene, camera);
         }
         animate(0);
@@ -319,14 +405,31 @@
             renderer.setSize(window.innerWidth, window.innerHeight);
         });
 
-        let trajectoryVisible = true;
+        let trajectoryVisible = false;
 
         function toggleTrajectory() {
             trajectoryVisible = !trajectoryVisible;
-            Object.values(trajectoryObjects).forEach(trajectory => {
-                trajectory.visible = trajectoryVisible;
-            });
+
+            if (trajectoryVisible) {
+                // Получаем выбранные спутники
+                const checkboxes = document.querySelectorAll('#satelliteContainer input[type="checkbox"]:checked');
+                const selectedPaths = Array.from(checkboxes).map(checkbox => checkbox.value);
+
+                // Строим траектории для каждого спутника
+                selectedPaths.forEach(title => {
+                    drawSatellitePastTrajectory(title);
+                });
+            } else {
+                // Скрываем все траектории
+                Object.keys(trajectoryObjects).forEach(title => {
+                    if (trajectoryObjects[title]) {
+                        scene.remove(trajectoryObjects[title]);
+                        delete trajectoryObjects[title];
+                    }
+                });
+            }
         }
     </script>
 </body>
+
 </html>
