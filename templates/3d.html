@@ -7,6 +7,8 @@
     <title>3D Отслеживание</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/controls/OrbitControls.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/loaders/FBXLoader.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.137.0/examples/js/libs/fflate.min.js"></script>
     <style>
         body {
             margin: 0;
@@ -123,6 +125,8 @@
 
         const ambientLight = new THREE.AmbientLight(0x404040);
         scene.add(ambientLight);
+        let satelliteModel = null;
+        let loadedModel = null;
 
         const trajectoryObjects = {};
         const EARTH_RADIUS = 1; // Радиус Земли в условных единицах
@@ -138,6 +142,28 @@
             0xff8000, // orange
             0x8000ff  // purple
         ];
+
+        // Функция загрузки и кэширования модели
+        function loadSatelliteModel() {
+            return new Promise((resolve, reject) => {
+                if (loadedModel) {
+                    resolve(loadedModel.clone());
+                    return;
+                }
+
+                const fbxLoader = new THREE.FBXLoader();
+                fbxLoader.load(
+                    '/static/models/satellite.fbx',
+                    (model) => {
+                        model.scale.set(0.00005, 0.00005, 0.00005);
+                        loadedModel = model;
+                        resolve(model.clone());
+                    },
+                    undefined,
+                    reject
+                );
+            });
+        }
 
         function getColorForSatellite(title) {
             if (!satelliteColors[title]) {
@@ -174,9 +200,9 @@
                         const lon = point.lon * (Math.PI / 180);
 
                         // Расчет позиции в 3D пространстве
-                        const x = point.radius/6371 * Math.cos(lat) * Math.cos(lon);
-                        const y = point.radius/6371 * Math.cos(lat) * Math.sin(lon);
-                        const z = point.radius/6371 * Math.sin(lat);
+                        const x = point.radius / 6371 * Math.cos(lat) * Math.cos(lon);
+                        const y = point.radius / 6371 * Math.cos(lat) * Math.sin(lon);
+                        const z = point.radius / 6371 * Math.sin(lat);
 
                         positions.push(x, y, z);
                     });
@@ -338,38 +364,45 @@
         }
 
         function updateSatellitePositions(selectedPaths) {
-            selectedPaths.forEach(title => {
-                fetch('/get_satellite_positions', {
-                    method: 'POST',
-                    headers: {
-                        'Content-Type': 'application/json',
-                    },
-                    body: JSON.stringify({ title }),
-                })
-                    .then(response => response.json())
-                    .then(satellite => {
-                        const lat = satellite.lat * (Math.PI / 180);
-                        const lon = satellite.lon * (Math.PI / 180);
-                        const radius = satellite.radius/6371;
-                        
-                        console.log(`Satellite: ${title}`);
-                        console.log(`Raw radius: ${satellite.radius} km`);
+            selectedPaths.forEach(async (title) => {
+                try {
+                    const response = await fetch('/get_satellite_positions', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify({ title }),
+                    });
 
-                        const x = radius * Math.cos(lat) * Math.cos(lon);
-                        const y = radius * Math.cos(lat) * Math.sin(lon);
-                        const z = radius * Math.sin(lat);
+                    const satellite = await response.json();
+                    const lat = satellite.lat * (Math.PI / 180);
+                    const lon = satellite.lon * (Math.PI / 180);
+                    const radius = satellite.radius / 6371;
 
+                    const x = radius * Math.cos(lat) * Math.cos(lon);
+                    const y = radius * Math.cos(lat) * Math.sin(lon);
+                    const z = radius * Math.sin(lat);
 
-                        if (!satelliteObjects[title]) {
-                            satelliteObjects[title] = createSatelliteModel();
-                            scene.add(satelliteObjects[title]);
+                    if (!satelliteObjects[title]) {
+                        try {
+                            const model = await loadSatelliteModel();
+                            satelliteObjects[title] = model;
+                            scene.add(model);
+                        } catch (error) {
+                            console.error('Failed to load satellite model:', error);
+                            return;
                         }
+                    }
 
+                    if (satelliteObjects[title]) {
                         satelliteObjects[title].position.set(x, y, z);
-                        // Orient satellite towards Earth's center
                         satelliteObjects[title].lookAt(0, 0, 0);
                         satelliteObjects[title].rotateX(Math.PI / 2);
-                    });
+                        satelliteObjects[title].rotateZ(Math.PI); // поворот на 180 градусов по Y
+                    }
+                } catch (error) {
+                    console.error(`Error updating satellite ${title}:`, error);
+                }
             });
         }
 
