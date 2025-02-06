@@ -80,11 +80,11 @@
 
         // Загрузка текстур
         const textureLoader = new THREE.TextureLoader();
-        const dayTexture = textureLoader.load('/static/textures/earth_daymap.jpg');
+        const dayTexture = textureLoader.load('/static/textures/earth_daymap_8k.jpg');
         const nightTexture = textureLoader.load('/static/textures/earth_nightmap.jpg');
         const cloudsTexture = textureLoader.load('/static/textures/earth_clouds.png');
-        const milkyWayTexture = textureLoader.load('/static/textures/milkyway.jpg');
-        const starsTexture = textureLoader.load('/static/textures/stars.jpg');
+        const milkyWayTexture = textureLoader.load('/static/textures/milkyway_8k.jpg');
+        const starsTexture = textureLoader.load('/static/textures/stars_8k.jpg');
 
         let isDay = true;
         let currentBackgroundTexture = milkyWayTexture;
@@ -112,9 +112,22 @@
         const cloudsGeometry = new THREE.SphereGeometry(1.01, 64, 64);
         const cloudsMaterial = new THREE.MeshPhongMaterial({
             map: cloudsTexture,
+            alphaMap: cloudsTexture,         // Используем ту же текстуру как альфа-карту
             transparent: true,
-            opacity: 0.8
+            opacity: 0.8,
+            depthWrite: false,
+            blending: THREE.AdditiveBlending,
+            side: THREE.DoubleSide
         });
+        const atmosphereGeometry = new THREE.SphereGeometry(1.01, 64, 64);
+        const atmosphereMaterial = new THREE.MeshPhongMaterial({
+            transparent: true,
+            opacity: 0.2,
+            color: new THREE.Color(0x88ccff),
+            side: THREE.BackSide
+        });
+        const atmosphere = new THREE.Mesh(atmosphereGeometry, atmosphereMaterial);
+        earth.add(atmosphere);
         const clouds = new THREE.Mesh(cloudsGeometry, cloudsMaterial);
         earth.add(clouds);
 
@@ -225,68 +238,6 @@
                     scene.add(trajectoryLine);
                 })
                 .catch(error => console.error('Ошибка получения траектории:', error));
-        }
-
-
-        // Create detailed satellite model
-        function createSatelliteModel() {
-            const satelliteGroup = new THREE.Group();
-
-            // Main body
-            const bodyGeometry = new THREE.BoxGeometry(0.015, 0.015, 0.03);
-            const bodyMaterial = new THREE.MeshPhongMaterial({
-                color: 0x808080,
-                shininess: 100,
-                specular: 0x444444
-            });
-            const body = new THREE.Mesh(bodyGeometry, bodyMaterial);
-            satelliteGroup.add(body);
-
-            // Solar panels
-            const panelGeometry = new THREE.BoxGeometry(0.06, 0.03, 0.001);
-            const panelMaterial = new THREE.MeshPhongMaterial({
-                color: 0x2244ff,
-                shininess: 50,
-                specular: 0x222222
-            });
-
-            const leftPanel = new THREE.Mesh(panelGeometry, panelMaterial);
-            leftPanel.position.x = -0.035;
-            satelliteGroup.add(leftPanel);
-
-            const rightPanel = new THREE.Mesh(panelGeometry, panelMaterial);
-            rightPanel.position.x = 0.035;
-            satelliteGroup.add(rightPanel);
-
-            // Antenna
-            const antennaGeometry = new THREE.CylinderGeometry(0.001, 0.001, 0.02);
-            const antennaMaterial = new THREE.MeshPhongMaterial({
-                color: 0xcccccc,
-                shininess: 80,
-                specular: 0x444444
-            });
-            const antenna = new THREE.Mesh(antennaGeometry, antennaMaterial);
-            antenna.rotation.x = Math.PI / 2;
-            antenna.position.z = 0.02;
-            satelliteGroup.add(antenna);
-
-            // Additional details
-            const detailGeometry = new THREE.BoxGeometry(0.008, 0.008, 0.008);
-            const detailMaterial = new THREE.MeshPhongMaterial({
-                color: 0x666666,
-                shininess: 60,
-                specular: 0x333333
-            });
-
-            const topDetail = new THREE.Mesh(detailGeometry, detailMaterial);
-            topDetail.position.y = 0.01;
-            satelliteGroup.add(topDetail);
-
-            const bottomDetail = new THREE.Mesh(detailGeometry, detailMaterial);
-            bottomDetail.position.y = -0.01;
-            satelliteGroup.add(bottomDetail);
-
-            return satelliteGroup;
         }
 
         // Переключение фона
