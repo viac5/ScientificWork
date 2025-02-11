@@ -723,5 +723,6 @@ def getSelectedSatellite(title):
     #print("выбраны:", selected_unit)
     return selected_unit
 
+
 if __name__ == '__main__':
     app.run(debug=True)
