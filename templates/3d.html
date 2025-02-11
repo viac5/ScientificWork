@@ -23,7 +23,7 @@
             background-color: white;
             padding: 20px;
             border-radius: 8px;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            box-shadow: 0 4px 8px rgba(11, 10, 10, 0.2);
             z-index: 1000;
             display: none;
         }
@@ -177,6 +177,7 @@
             }
             return satelliteColors[title];
         }
+
         // Основная функция построения траектории
         function drawSatellitePastTrajectory(title) {
             fetch('/get_satellite_past_trajectory', {
@@ -226,7 +227,6 @@
                 })
                 .catch(error => console.error('Ошибка получения траектории:', error));
         }
-
 
         // Create detailed satellite model
         function createSatelliteModel() {
@@ -342,12 +342,9 @@
         }
 
         function loadSelectedSatellites() {
-            const checkboxes = document.querySelectorAll('#satelliteContainer input[type="checkbox"]:checked');
-            const selectedPaths = Array.from(checkboxes).map(checkbox => checkbox.value);
+            const selectedPaths = Array.from(document.querySelectorAll('#satelliteContainer input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
 
-            if (updateInterval) {
-                clearInterval(updateInterval);
-            }
+            if (updateInterval) clearInterval(updateInterval);
 
             Object.keys(satelliteObjects).forEach(title => {
                 if (!selectedPaths.includes(title)) {
@@ -356,21 +353,16 @@
                 }
             });
 
-            updateInterval = setInterval(() => {
-                updateSatellitePositions(selectedPaths);
-            }, 1000);
-
+            updateInterval = setInterval(() => updateSatellitePositions(selectedPaths), 1000);
             closeSatelliteModal();
         }
 
-        function updateSatellitePositions(selectedPaths) {
-            selectedPaths.forEach(async (title) => {
+        async function updateSatellitePositions(selectedPaths) {
+            for (const title of selectedPaths) {
                 try {
                     const response = await fetch('/get_satellite_positions', {
                         method: 'POST',
-                        headers: {
-                            'Content-Type': 'application/json',
-                        },
+                        headers: { 'Content-Type': 'application/json' },
                         body: JSON.stringify({ title }),
                     });
 
@@ -390,20 +382,18 @@
                             scene.add(model);
                         } catch (error) {
                             console.error('Failed to load satellite model:', error);
-                            return;
+                            continue;
                         }
                     }
 
-                    if (satelliteObjects[title]) {
-                        satelliteObjects[title].position.set(x, y, z);
-                        satelliteObjects[title].lookAt(0, 0, 0);
-                        satelliteObjects[title].rotateX(Math.PI / 2);
-                        satelliteObjects[title].rotateZ(Math.PI); // поворот на 180 градусов по Y
-                    }
+                    satelliteObjects[title].position.set(x, y, z);
+                    satelliteObjects[title].lookAt(0, 0, 0);
+                    satelliteObjects[title].rotateX(Math.PI / 2);
+                    satelliteObjects[title].rotateZ(Math.PI); // поворот на 180 градусов по Y
                 } catch (error) {
                     console.error(`Error updating satellite ${title}:`, error);
                 }
-            });
+            }
         }
 
         // Camera position and animation
@@ -444,16 +434,10 @@
             trajectoryVisible = !trajectoryVisible;
 
             if (trajectoryVisible) {
-                // Получаем выбранные спутники
-                const checkboxes = document.querySelectorAll('#satelliteContainer input[type="checkbox"]:checked');
-                const selectedPaths = Array.from(checkboxes).map(checkbox => checkbox.value);
+                const selectedPaths = Array.from(document.querySelectorAll('#satelliteContainer input[type="checkbox"]:checked')).map(checkbox => checkbox.value);
 
-                // Строим траектории для каждого спутника
-                selectedPaths.forEach(title => {
-                    drawSatellitePastTrajectory(title);
-                });
+                selectedPaths.forEach(title => drawSatellitePastTrajectory(title));
             } else {
-                // Скрываем все траектории
                 Object.keys(trajectoryObjects).forEach(title => {
                     if (trajectoryObjects[title]) {
                         scene.remove(trajectoryObjects[title]);

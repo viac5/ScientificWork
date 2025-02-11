@@ -10,6 +10,7 @@ import logging
 import re
 from astropy.coordinates import get_sun, EarthLocation
 from astropy.time import Time
+import threading
 
 app = Flask(__name__)
 
@@ -514,6 +515,9 @@ def get_selected_ground_units():
 
     return jsonify(selected_units)
 
+# Глобальная переменная для кэширования данных спутников
+satellite_cache = None
+cache_lock = threading.Lock()
 
 def load_satellites_ini():
     # Получаем базовый путь к проекту
@@ -542,89 +546,91 @@ def load_satellites_ini():
 
     return satellites_paths
 
-
 def read_satellite_paths():
-    satellite_paths = []
-    object_paths = load_satellites_ini()
+    global satellite_cache
+    with cache_lock:
+        if satellite_cache is not None:
+            return satellite_cache
 
-    for path in object_paths:
-        ini_file_path = os.path.join(path, 'params.ini')
-        if os.path.exists(ini_file_path):
-            config = configparser.ConfigParser()
-            # Изменяем кодировку на windows-1251 для чтения файла
-            config.read(ini_file_path, encoding='windows-1251')
-            try:
-                title = config.get('params', 'title', fallback='Неизвестно').split('/*')[0].strip()
-                caption = config.get('params', 'caption', fallback='Неизвестно').split('/*')[0].strip()
-                mission_begin = config.get('params', 'mission.begin', fallback='Неизвестно').split('/*')[0].strip()
-                mission_finish = config.get('params', 'mission.finish', fallback='Неизвестно').split('/*')[0].strip()
+        satellite_paths = []
+        object_paths = load_satellites_ini()
 
-                semi_major_axis_str = config.get('mission.initcond', 'orbit.semiaxis(km)', fallback='0').split('/*')[0].strip()
-                eccentricity_str = config.get('mission.initcond', 'orbit.eccentricity', fallback='0').split('/*')[0].strip()
-                latitude_str = config.get('mission.initcond', 'orbit.latarg(deg)', fallback='0').split('/*')[0].strip()
-                periarg_str = config.get('mission.initcond', 'orbit.periarg(deg)', fallback='0').split('/*')[0].strip()
-                inclination_str = config.get('mission.initcond', 'orbit.inclination(deg)', fallback='0').split('/*')[0].strip()
-                ascnode_str = config.get('mission.initcond', 'orbit.ascnode(deg)', fallback='0').split('/*')[0].strip()
-                longitude_str = config.get('mission.initcond', 'orbit.long(deg)', fallback='0').split('/*')[0].strip()
+        for path in object_paths:
+            ini_file_path = os.path.join(path, 'params.ini')
+            if os.path.exists(ini_file_path):
+                config = configparser.ConfigParser()
+                config.read(ini_file_path, encoding='windows-1251')
+                try:
+                    title = config.get('params', 'title', fallback='Неизвестно').split('/*')[0].strip()
+                    caption = config.get('params', 'caption', fallback='Неизвестно').split('/*')[0].strip()
+                    mission_begin = config.get('params', 'mission.begin', fallback='Неизвестно').split('/*')[0].strip()
+                    mission_finish = config.get('params', 'mission.finish', fallback='Неизвестно').split('/*')[0].strip()
 
-                Roll_str = config.get('params.shot', 'Roll(deg)', fallback='0').split('/*')[0].strip()
-                Pitch_str = config.get('params.shot', 'Pitch(deg)', fallback='0').split('/*')[0].strip()
-                Wroll_str = config.get('params.shot', 'Wroll(deg/sec)', fallback='0').split('/*')[0].strip()
-                Wpitch_str = config.get('params.shot', 'Wpitch(deg/sec)', fallback='0').split('/*')[0].strip()
-                Rev_time_str = config.get('params.shot', 'Rev_time(sec)', fallback='0').split('/*')[0].strip()
-                Day_time_str = config.get('params.shot', 'Day_time(sec)', fallback='0').split('/*')[0].strip()
-                Route_time_str = config.get('params.shot', 'Route_time(sec)', fallback='0').split('/*')[0].strip()
-                Route_between_time_str = config.get('params.shot', 'Route_between_time(sec)', fallback='0').split('/*')[0].strip()
+                    semi_major_axis_str = config.get('mission.initcond', 'orbit.semiaxis(km)', fallback='0').split('/*')[0].strip()
+                    eccentricity_str = config.get('mission.initcond', 'orbit.eccentricity', fallback='0').split('/*')[0].strip()
+                    latitude_str = config.get('mission.initcond', 'orbit.latarg(deg)', fallback='0').split('/*')[0].strip()
+                    periarg_str = config.get('mission.initcond', 'orbit.periarg(deg)', fallback='0').split('/*')[0].strip()
+                    inclination_str = config.get('mission.initcond', 'orbit.inclination(deg)', fallback='0').split('/*')[0].strip()
+                    ascnode_str = config.get('mission.initcond', 'orbit.ascnode(deg)', fallback='0').split('/*')[0].strip()
+                    longitude_str = config.get('mission.initcond', 'orbit.long(deg)', fallback='0').split('/*')[0].strip()
 
+                    Roll_str = config.get('params.shot', 'Roll(deg)', fallback='0').split('/*')[0].strip()
+                    Pitch_str = config.get('params.shot', 'Pitch(deg)', fallback='0').split('/*')[0].strip()
+                    Wroll_str = config.get('params.shot', 'Wroll(deg/sec)', fallback='0').split('/*')[0].strip()
+                    Wpitch_str = config.get('params.shot', 'Wpitch(deg/sec)', fallback='0').split('/*')[0].strip()
+                    Rev_time_str = config.get('params.shot', 'Rev_time(sec)', fallback='0').split('/*')[0].strip()
+                    Day_time_str = config.get('params.shot', 'Day_time(sec)', fallback='0').split('/*')[0].strip()
+                    Route_time_str = config.get('params.shot', 'Route_time(sec)', fallback='0').split('/*')[0].strip()
+                    Route_between_time_str = config.get('params.shot', 'Route_between_time(sec)', fallback='0').split('/*')[0].strip()
 
-                # Преобразование очищенных строк в float
-                semi_major_axis = float(semi_major_axis_str)
-                eccentricity = float(eccentricity_str)
-                latitude = float(latitude_str)
-                if periarg_str=='-NAN':
-                    periarg= -100000000
-                else:
-                    periarg = float(periarg_str)
-                inclination=float(inclination_str)
-                ascnode=float(ascnode_str)
-                longitude = float(longitude_str)
+                    semi_major_axis = float(semi_major_axis_str)
+                    eccentricity = float(eccentricity_str)
+                    latitude = float(latitude_str)
+                    periarg = float(periarg_str) if periarg_str != '-NAN' else -100000000
+                    inclination = float(inclination_str)
+                    ascnode = float(ascnode_str)
+                    longitude = float(longitude_str)
+                    Wroll = float(Wroll_str)
+                    Wpitch = float(Wpitch_str)
+                    Rev_time = float(Rev_time_str)
+                    Day_time = float(Day_time_str)
+                    Route_between_time = float(Route_between_time_str)
 
-                Wroll=float(Wroll_str)
-                Wpitch = float(Wpitch_str)
-                Rev_time = float(Rev_time_str)
-                Day_time = float(Day_time_str)
-                Route_between_time = float(Route_between_time_str)
+                    satellite_paths.append({
+                        'title': title,
+                        'caption': caption,
+                        'mission_begin': mission_begin,
+                        'mission_finish': mission_finish,
+                        'eccentricity': eccentricity,
+                        'semi_axis': semi_major_axis,
+                        'latitude': latitude,
+                        'periarg': periarg,
+                        'inclination': inclination,
+                        'ascnode': ascnode,
+                        'longitude': longitude,
+                        'Roll_str': Roll_str,
+                        'Pitch_str': Pitch_str,
+                        'Wroll': Wroll,
+                        'Wpitch': Wpitch,
+                        'Rev_time': Rev_time,
+                        'Day_time': Day_time,
+                        'Route_time_str': Route_time_str,
+                        'Route_between_time': Route_between_time,
+                    })
+                except ValueError as e:
+                    print(f"Ошибка преобразования в число в файле {ini_file_path}: {e}")
+                except Exception as e:
+                    print(f"Ошибка при чтении {ini_file_path}: {e}")
+            else:
+                print(f"Файл {ini_file_path} не найден.")
 
+        satellite_cache = satellite_paths
+        return satellite_paths
 
-                satellite_paths.append({
-                    'title': title,
-                    'caption': caption,
-                    'mission_begin': mission_begin,
-                    'mission_finish': mission_finish,
-                    'eccentricity': eccentricity,
-                    'semi_axis': semi_major_axis,
-                    'latitude': latitude,
-                    'periarg' : periarg,
-                    'inclination':inclination,
-                    'ascnode':ascnode,
-                    'longitude': longitude,
-                    'Roll_str': Roll_str,
-                    'Pitch_str': Pitch_str,
-                    'Wroll': Wroll,
-                    'Wpitch': Wpitch,
-                    'Rev_time': Rev_time,
-                    'Day_time': Day_time,
-                    'Route_time_str':Route_time_str,
-                    'Route_between_time': Route_between_time,
-                })
-            except ValueError as e:
-                print(f"Ошибка преобразования в число в файле {ini_file_path}: {e}")
-            except Exception as e:
-                print(f"Ошибка при чтении {ini_file_path}: {e}")
-        else:
-            print(f"Файл {ini_file_path} не найден.")
-    #print("Список спутников перед возвратом:", satellite_paths)
-    return satellite_paths
+@app.route('/get_satellites', methods=['GET'])
+def get_satellite_paths():
+    data = read_satellite_paths()
+    return jsonify(data)
 
 # Настройка логирования
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(levelname)s - %(message)s')
@@ -701,14 +707,6 @@ def read_satellite_radars():
 
     return satellite_paths
 
-
-@app.route('/get_satellites', methods=['GET'])
-def get_satellite_paths():
-    data = read_satellite_paths()
-    #print("Отправляем спутники:", data)  # Для отладки
-    return jsonify(data)
-
-
 @app.route('/get_selected_satellites', methods=['POST'])
 def get_selected_satellites():
     selected_ids = request.json.get('selected_paths', [])
@@ -725,8 +723,5 @@ def getSelectedSatellite(title):
     #print("выбраны:", selected_unit)
     return selected_unit
 
-
 if __name__ == '__main__':
     app.run(debug=True)
-
-
