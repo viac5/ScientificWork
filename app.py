@@ -177,16 +177,24 @@ def get_visibility_zone():
 
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+    
+satellite_cache = None
+cache_lock = threading.Lock()
+
+def getSelectedSatellite(title):
+    global satellite_cache
+    with cache_lock:
+        if satellite_cache is None:
+            satellite_cache = read_satellite_paths()
+        return [sat for sat in satellite_cache if sat['title'] == title]
+
 def calculate_satellite_position(semi_axis, eccentricity, inclination, periarg, ascnode, time_passed):
-    # Константы
     MU = 398600.4418  # Гравитационный параметр Земли, км^3 / с^2
     EARTH_ROTATION_RATE = 2 * math.pi / 86400  # Угловая скорость вращения Земли, рад/с
 
-    # Средняя аномалия
     n = math.sqrt(MU / (semi_axis ** 3))
     M = n * time_passed
 
-    # Решение уравнения Кеплера
     E = M
     tol = 1e-8
     for _ in range(100):
@@ -195,19 +203,15 @@ def calculate_satellite_position(semi_axis, eccentricity, inclination, periarg, 
         if abs(delta) < tol:
             break
 
-    # Истинная аномалия
     sin_true_anomaly = math.sqrt(1 - eccentricity**2) * math.sin(E) / (1 - eccentricity * math.cos(E))
     cos_true_anomaly = (math.cos(E) - eccentricity) / (1 - eccentricity * math.cos(E))
     true_anomaly = math.atan2(sin_true_anomaly, cos_true_anomaly)
 
-    # Расстояние до спутника
     r = semi_axis * (1 - eccentricity * math.cos(E))
 
-    # Геоцентрические координаты в плоскости орбиты
     x_orbit = r * math.cos(true_anomaly)
     y_orbit = r * math.sin(true_anomaly)
 
-    # Преобразование в 3D-геоцентрическую систему
     x_geo = (math.cos(periarg) * math.cos(ascnode) - math.sin(periarg) * math.sin(ascnode) * math.cos(inclination)) * x_orbit \
           - (math.sin(periarg) * math.cos(ascnode) + math.cos(periarg) * math.sin(ascnode) * math.cos(inclination)) * y_orbit
     y_geo = (math.cos(periarg) * math.sin(ascnode) + math.sin(periarg) * math.cos(ascnode) * math.cos(inclination)) * x_orbit \
@@ -215,7 +219,6 @@ def calculate_satellite_position(semi_axis, eccentricity, inclination, periarg, 
     z_geo = (math.sin(periarg) * math.sin(inclination)) * x_orbit \
           + (math.cos(periarg) * math.sin(inclination)) * y_orbit
 
-    # Учет вращения Земли
     earth_rotation_angle = EARTH_ROTATION_RATE * time_passed
     x_rot = x_geo * math.cos(earth_rotation_angle) + y_geo * math.sin(earth_rotation_angle)
     y_rot = -x_geo * math.sin(earth_rotation_angle) + y_geo * math.cos(earth_rotation_angle)
@@ -223,26 +226,21 @@ def calculate_satellite_position(semi_axis, eccentricity, inclination, periarg, 
 
     return x_rot, y_rot, z_rot, r
 
-
 @app.route('/get_satellite_positions', methods=['POST'])
 def get_satellite_positions():
     try:
-        # Получаем title спутника из запроса
         data = request.get_json()
         title = data.get('title')
 
         if not title:
             return jsonify({'error': 'Satellite title is required'}), 400
 
-        # Получаем данные о спутнике по title
         satellite_data = getSelectedSatellite(title)
         if not satellite_data:
             return jsonify({'error': 'Satellite not found'}), 404
 
-        # Предполагаем, что функция getSelectedSatellite возвращает список, берем первый элемент
         satellite = satellite_data[0]
 
-        # Извлекаем параметры орбиты с проверкой на наличие значений
         try:
             semi_axis = satellite['semi_axis']
             eccentricity = satellite['eccentricity']
@@ -252,29 +250,22 @@ def get_satellite_positions():
         except KeyError as e:
             return jsonify({'error': f'Missing satellite parameter: {str(e)}'}), 400
 
-        # Вычисляем текущее положение
         current_time = time.time()
 
-        # Обработка времени запуска миссии
         try:
             mission_start_time = time.strptime(satellite['mission_begin'], "%d.%m.%Y %H:%M:%S.%f")
             time_passed = current_time - time.mktime(mission_start_time)
         except (ValueError, KeyError) as e:
             return jsonify({'error': 'Invalid mission start time format or missing parameter.'}), 400
 
-        # Вызов функции для вычисления позиции спутника
-        x_geo, y_geo, z_geo, r = calculate_satellite_position(semi_axis, eccentricity, inclination, periarg, ascnode,
-                                                              time_passed)
+        x_geo, y_geo, z_geo, r = calculate_satellite_position(semi_axis, eccentricity, inclination, periarg, ascnode, time_passed)
 
-        # Проверка на нулевое значение r перед преобразованием
         if r == 0:
             return jsonify({'error': 'Calculated radius is zero, cannot compute latitude and longitude.'}), 500
 
-        # Преобразование 3D координат в широту и долготу
         lat = math.degrees(math.asin(z_geo / r))
         lon = math.degrees(math.atan2(y_geo, x_geo))
 
-        # Формируем ответ с данными о положении спутника
         position = {
             'title': satellite['title'],
             'lat': lat,
@@ -287,26 +278,21 @@ def get_satellite_positions():
     except Exception as e:
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/get_satellite_past_trajectory', methods=['POST'])
 def get_satellite_past_trajectory():
     try:
-        # Получаем title спутника из запроса
         data = request.get_json()
         title = data.get('title')
 
         if not title:
             return jsonify({'error': 'Satellite title is required'}), 400
 
-        # Получаем данные о спутнике по title
         satellite_data = getSelectedSatellite(title)
         if not satellite_data:
             return jsonify({'error': 'Satellite not found'}), 404
 
-        # Предполагаем, что функция getSelectedSatellite возвращает список, берем первый элемент
         satellite = satellite_data[0]
 
-        # Извлекаем параметры орбиты с проверкой на наличие значений
         try:
             semi_axis = satellite['semi_axis']
             eccentricity = satellite['eccentricity']
@@ -316,41 +302,32 @@ def get_satellite_past_trajectory():
         except KeyError as e:
             return jsonify({'error': f'Missing satellite parameter: {str(e)}'}), 400
 
-        # Обработка времени запуска миссии
         try:
             mission_start_time = time.strptime(satellite['mission_begin'], "%d.%m.%Y %H:%M:%S.%f")
             mission_start_timestamp = time.mktime(mission_start_time)
         except (ValueError, KeyError) as e:
             return jsonify({'error': 'Invalid mission start time format or missing parameter.'}), 400
 
-        # Вычисляем текущее время
         current_time = time.time()
 
-        # Генерируем временные метки за последний час (каждые 10 секунд, например)
         trajectory_points = []
-        for t in range(0, 20000, 10):  # 3600 секунд в часе, шаг 10 секунд
+        for t in range(0, 20000, 10):
             time_passed = (current_time - mission_start_timestamp) - t
             x_geo, y_geo, z_geo, r = calculate_satellite_position(semi_axis, eccentricity, inclination, periarg, ascnode, time_passed)
 
-            # Проверка на нулевое значение r перед преобразованием
             if r == 0:
-                continue  # Можно добавить обработку ошибки
+                continue
 
-            # Преобразование 3D координат в широту и долготу
             lat = math.degrees(math.asin(z_geo / r))
             lon = math.degrees(math.atan2(y_geo, x_geo))
 
-            # Добавляем точку в траекторию
             trajectory_points.append({
-                'time': current_time - t,  # Время точки
+                'time': current_time - t,
                 'lat': lat,
                 'lon': lon,
                 'radius': r,
             })
-            #print(f"t: {t}, lat: {lat}, lon: {lon}, r: {r}")  # Вывод для отладки
-            
 
-        # Формируем ответ с траекторией спутника
         trajectory = {
             'title': satellite['title'],
             'trajectory': trajectory_points,
@@ -716,13 +693,6 @@ def get_selected_satellites():
     #print("Отправляем спутники:", selected_units)  # Для отладки
 
     return jsonify(selected_units)
-
-def getSelectedSatellite(title):
-    all_satellites = read_satellite_paths()
-    selected_unit = [unit for unit in all_satellites if unit['title'] == title]
-    #print("выбраны:", selected_unit)
-    return selected_unit
-
 
 if __name__ == '__main__':
     app.run(debug=True)
